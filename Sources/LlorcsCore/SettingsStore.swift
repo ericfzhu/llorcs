@@ -100,6 +100,13 @@ public final class SettingsStore: ObservableObject {
         }
     }
 
+    public func isEnabledForEventTap() -> Bool {
+        lock.lock()
+        let value = snapshot.enabled
+        lock.unlock()
+        return value
+    }
+
     private func save() {
         let updated = Snapshot(
             enabled: enabled,

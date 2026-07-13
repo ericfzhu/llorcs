@@ -31,4 +31,24 @@ final class ScrollClassifierTests: XCTestCase {
         ))
         XCTAssertEqual(result, .trackpad)
     }
+
+    func testMomentumEventWithoutHIDSignalIsTrackpad() {
+        let result = ScrollClassifier.classify(.init(
+            isContinuous: true,
+            scrollPhase: 0,
+            momentumPhase: 2,
+            recentMouseDeviceID: nil
+        ))
+        XCTAssertEqual(result, .trackpad)
+    }
+
+    func testContinuousEventWithoutPhaseIsStillTrackpadWithoutHIDSignal() {
+        let result = ScrollClassifier.classify(.init(
+            isContinuous: true,
+            scrollPhase: 0,
+            momentumPhase: 0,
+            recentMouseDeviceID: nil
+        ))
+        XCTAssertEqual(result, .trackpad)
+    }
 }

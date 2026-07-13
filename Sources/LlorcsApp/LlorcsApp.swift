@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import LlorcsCore
 import SwiftUI
 
@@ -29,14 +30,28 @@ final class AppModel: ObservableObject {
     let mouseMonitor: MouseDeviceMonitor
     let reverser: ScrollReverser
     let launchAtLogin = LaunchAtLoginController()
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         let settings = SettingsStore()
-        let mouseMonitor = MouseDeviceMonitor()
+        let mouseMonitor = MouseDeviceMonitor(enabled: settings.enabled)
         self.settings = settings
         self.mouseMonitor = mouseMonitor
         self.reverser = ScrollReverser(settings: settings, mouseMonitor: mouseMonitor)
-        reverser.start()
+
+        settings.$enabled
+            .removeDuplicates()
+            .sink { [weak reverser, weak mouseMonitor] enabled in
+                DispatchQueue.main.async {
+                    mouseMonitor?.setMonitoringEnabled(enabled)
+                    if enabled {
+                        reverser?.refreshPermissionAndState()
+                    } else {
+                        reverser?.stop()
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
 }
 
@@ -59,8 +74,16 @@ private struct MenuContent: View {
         VStack(spacing: 14) {
             header
 
-            if !reverser.permissionGranted {
-                permissionCard
+            if reverser.state == .accessibilityPermissionNeeded {
+                accessibilityPermissionCard
+            }
+
+            if mouseMonitor.accessState != .granted {
+                inputMonitoringCard
+            }
+
+            if reverser.state == .eventTapFailed {
+                eventTapFailureCard
             }
 
             VStack(spacing: 0) {
@@ -106,6 +129,11 @@ private struct MenuContent: View {
             }
         }
         .padding(16)
+        .onAppear {
+            reverser.refreshPermissionAndState()
+            mouseMonitor.refreshAccessState()
+            launchAtLogin.refresh()
+        }
     }
 
     private var header: some View {
@@ -127,7 +155,7 @@ private struct MenuContent: View {
         .frame(minHeight: 44)
     }
 
-    private var permissionCard: some View {
+    private var accessibilityPermissionCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Accessibility permission needed", systemImage: "hand.raised.fill")
                 .font(.subheadline.weight(.semibold))
@@ -142,6 +170,40 @@ private struct MenuContent: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var inputMonitoringCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Input Monitoring for per-mouse rules", systemImage: "computermouse.fill")
+                .font(.subheadline.weight(.semibold))
+            Text("The main mouse and trackpad settings still work without this. Allow Input Monitoring to identify individual wheel mice.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Allow Input Monitoring") { mouseMonitor.requestAccess() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var eventTapFailureCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Scroll handler could not start", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.weight(.semibold))
+            Text("Accessibility is allowed, but macOS did not create the scroll event tap. Retry, or toggle Accessibility off and on in System Settings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Retry") { reverser.start() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var deviceSection: some View {
@@ -183,17 +245,57 @@ private struct MenuContent: View {
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 2)
+
+            Label(attributionStatusText, systemImage: attributionStatusIcon)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 2)
         }
     }
 
     private var status: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(reverser.isRunning ? Color.green : Color.orange)
+                .fill(statusColor)
                 .frame(width: 7, height: 7)
-            Text(reverser.isRunning ? "Active" : "Waiting for permission")
+            Text(statusText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var statusText: String {
+        switch reverser.state {
+        case .disabled: "Disabled"
+        case .accessibilityPermissionNeeded: "Accessibility needed"
+        case .starting: "Starting…"
+        case .active: "Active"
+        case .eventTapFailed: "Scroll handler failed"
+        }
+    }
+
+    private var statusColor: Color {
+        switch reverser.state {
+        case .active: .green
+        case .starting: .yellow
+        case .disabled: .secondary
+        case .accessibilityPermissionNeeded, .eventTapFailed: .orange
+        }
+    }
+
+    private var attributionStatusText: String {
+        switch mouseMonitor.attributionState {
+        case .permissionNeeded: "Per-device detection needs Input Monitoring"
+        case .awaitingWheelInput: "Per-device detection ready; scroll a mouse to verify"
+        case .ready: "Per-device wheel detection active"
+        }
+    }
+
+    private var attributionStatusIcon: String {
+        switch mouseMonitor.attributionState {
+        case .permissionNeeded: "lock.fill"
+        case .awaitingWheelInput: "waveform.path"
+        case .ready: "checkmark.circle.fill"
         }
     }
 

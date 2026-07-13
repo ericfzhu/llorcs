@@ -1,6 +1,18 @@
 import Foundation
 import IOKit.hid
 
+public enum HIDAccessState: Equatable {
+    case granted
+    case denied
+    case unknown
+}
+
+public enum MouseAttributionState: Equatable {
+    case permissionNeeded
+    case awaitingWheelInput
+    case ready
+}
+
 public struct MouseDevice: Identifiable, Hashable {
     public let id: String
     public let name: String
@@ -13,14 +25,20 @@ public struct MouseDevice: Identifiable, Hashable {
 
 public final class MouseDeviceMonitor: ObservableObject {
     @Published public private(set) var devices: [MouseDevice] = []
+    @Published public private(set) var accessState: HIDAccessState = .unknown
+    @Published public private(set) var hasObservedWheelInput = false
 
     private let manager: IOHIDManager
     private let queue = DispatchQueue(label: "app.llorcs.hid")
     private let lock = NSLock()
-    private var lastWheelDeviceID: String?
-    private var lastWheelTime: UInt64 = 0
+    private var monitoringEnabled: Bool
+    private var managerIsOpen = false
+    private var deviceCache: [UInt: MouseDevice] = [:]
+    private var observedWheelInput = false
+    private var recentWheelReports: [(deviceID: String, time: UInt64)] = []
 
-    public init() {
+    public init(enabled: Bool = true) {
+        monitoringEnabled = enabled
         manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
 
         let mouseMatch: [String: Any] = [
@@ -46,35 +64,154 @@ public final class MouseDeviceMonitor: ObservableObject {
         IOHIDManagerRegisterDeviceRemovalCallback(manager, deviceRemovedCallback, context)
         IOHIDManagerRegisterInputValueCallback(manager, inputValueCallback, context)
         IOHIDManagerSetDispatchQueue(manager, queue)
-        IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        refreshDevices()
+        refreshAccessState()
     }
 
     deinit {
-        IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        lock.lock()
+        let shouldClose = managerIsOpen
+        managerIsOpen = false
+        lock.unlock()
+        if shouldClose { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
     }
 
     public func recentWheelDeviceID(maxAgeNanoseconds: UInt64 = 80_000_000) -> String? {
         let now = DispatchTime.now().uptimeNanoseconds
         lock.lock()
         defer { lock.unlock() }
-        guard lastWheelTime > 0, now >= lastWheelTime, now - lastWheelTime <= maxAgeNanoseconds else {
-            return nil
+        // Ambiguous reports from two devices deliberately fall back to the
+        // global mouse rule rather than applying the wrong per-device rule.
+        return MouseWheelCorrelation.deviceID(
+            in: recentWheelReports,
+            now: now,
+            maxAgeNanoseconds: maxAgeNanoseconds
+        )
+    }
+
+    public var attributionState: MouseAttributionState {
+        switch accessState {
+        case .granted:
+            return hasObservedWheelInput ? .ready : .awaitingWheelInput
+        case .denied, .unknown:
+            return .permissionNeeded
         }
-        return lastWheelDeviceID
+    }
+
+    public func requestAccess() {
+        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        refreshAccessState()
+    }
+
+    public func setMonitoringEnabled(_ enabled: Bool) {
+        lock.lock()
+        monitoringEnabled = enabled
+        lock.unlock()
+        refreshAccessState()
+    }
+
+    public func refreshAccessState() {
+        let state: HIDAccessState
+        switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
+        case kIOHIDAccessTypeGranted:
+            state = .granted
+        case kIOHIDAccessTypeDenied:
+            state = .denied
+        default:
+            state = .unknown
+        }
+
+        if Thread.isMainThread {
+            accessState = state
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.accessState = state }
+        }
+        updateManager(for: state)
+    }
+
+    private func updateManager(for state: HIDAccessState) {
+        queue.async { [weak self] in
+            guard let self else { return }
+
+            self.lock.lock()
+            let isOpen = self.managerIsOpen
+            let shouldMonitor = self.monitoringEnabled
+            self.lock.unlock()
+
+            if state == .granted && shouldMonitor && !isOpen {
+                let result = IOHIDManagerOpen(self.manager, IOOptionBits(kIOHIDOptionsTypeNone))
+                self.lock.lock()
+                self.managerIsOpen = result == kIOReturnSuccess
+                self.lock.unlock()
+                if result == kIOReturnSuccess { self.refreshDevices() }
+            } else if (state != .granted || !shouldMonitor) && isOpen {
+                IOHIDManagerClose(self.manager, IOOptionBits(kIOHIDOptionsTypeNone))
+                self.lock.lock()
+                self.managerIsOpen = false
+                self.deviceCache.removeAll()
+                self.recentWheelReports.removeAll()
+                self.observedWheelInput = false
+                self.lock.unlock()
+                DispatchQueue.main.async { [weak self] in
+                    self?.devices = []
+                    self?.hasObservedWheelInput = false
+                }
+            }
+        }
     }
 
     fileprivate func recordWheel(from device: IOHIDDevice) {
-        let id = Self.deviceID(device)
+        let key = Self.deviceKey(device)
         lock.lock()
-        lastWheelDeviceID = id
-        lastWheelTime = DispatchTime.now().uptimeNanoseconds
+        let cachedDevice = deviceCache[key]
         lock.unlock()
+
+        let mouse = cachedDevice ?? Self.makeDevice(device)
+
+        lock.lock()
+        deviceCache[key] = mouse
+        let now = DispatchTime.now().uptimeNanoseconds
+        recentWheelReports.append((mouse.id, now))
+        recentWheelReports.removeAll { now >= $0.time && now - $0.time > 200_000_000 }
+        if recentWheelReports.count > 16 {
+            recentWheelReports.removeFirst(recentWheelReports.count - 16)
+        }
+        let isFirstWheelInput = !observedWheelInput
+        observedWheelInput = true
+        lock.unlock()
+
+        if isFirstWheelInput {
+            DispatchQueue.main.async { [weak self] in self?.hasObservedWheelInput = true }
+        }
+    }
+
+    fileprivate func deviceAdded(_ device: IOHIDDevice) {
+        let mouse = Self.makeDevice(device)
+        lock.lock()
+        deviceCache[Self.deviceKey(device)] = mouse
+        lock.unlock()
+        refreshDevices()
+    }
+
+    fileprivate func deviceRemoved(_ device: IOHIDDevice) {
+        lock.lock()
+        let removed = deviceCache.removeValue(forKey: Self.deviceKey(device))
+        if let removed {
+            recentWheelReports.removeAll { $0.deviceID == removed.id }
+        }
+        lock.unlock()
+        refreshDevices()
     }
 
     fileprivate func refreshDevices() {
-        let connected = (IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? [])
-            .map { MouseDevice(id: Self.deviceID($0), name: Self.deviceName($0)) }
+        let hidDevices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> ?? []
+        let pairs = hidDevices.map { (Self.deviceKey($0), Self.makeDevice($0)) }
+
+        lock.lock()
+        deviceCache = Dictionary(uniqueKeysWithValues: pairs)
+        lock.unlock()
+
+        let connected = pairs
+            .map(\.1)
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
         DispatchQueue.main.async { [weak self] in
@@ -86,16 +223,44 @@ public final class MouseDeviceMonitor: ObservableObject {
         IOHIDDeviceGetProperty(device, key as CFString)
     }
 
-    private static func deviceName(_ device: IOHIDDevice) -> String {
-        (property(kIOHIDProductKey, from: device) as? String) ?? "Mouse"
+    private static func makeDevice(_ device: IOHIDDevice) -> MouseDevice {
+        MouseDevice(
+            id: deviceID(device),
+            name: (property(kIOHIDProductKey, from: device) as? String) ?? "Mouse"
+        )
+    }
+
+    private static func deviceKey(_ device: IOHIDDevice) -> UInt {
+        UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
     }
 
     private static func deviceID(_ device: IOHIDDevice) -> String {
         let vendor = property(kIOHIDVendorIDKey, from: device) as? Int ?? 0
         let product = property(kIOHIDProductIDKey, from: device) as? Int ?? 0
         let location = property(kIOHIDLocationIDKey, from: device) as? Int ?? 0
-        let serial = property(kIOHIDSerialNumberKey, from: device) as? String ?? ""
-        return "\(vendor):\(product):\(location):\(serial)"
+        let serial = property(kIOHIDSerialNumberKey, from: device) as? String
+        let transport = property(kIOHIDTransportKey, from: device) as? String ?? "unknown"
+        return makeStableDeviceID(
+            vendor: vendor,
+            product: product,
+            serial: serial,
+            transport: transport,
+            location: location
+        )
+    }
+
+    static func makeStableDeviceID(
+        vendor: Int,
+        product: Int,
+        serial: String?,
+        transport: String,
+        location: Int
+    ) -> String {
+        let cleanedSerial = serial?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !cleanedSerial.isEmpty {
+            return "\(vendor):\(product):serial:\(cleanedSerial)"
+        }
+        return "\(vendor):\(product):\(transport):location:\(location)"
     }
 }
 
@@ -104,12 +269,12 @@ private func monitor(from context: UnsafeMutableRawPointer?) -> MouseDeviceMonit
     return Unmanaged<MouseDeviceMonitor>.fromOpaque(context).takeUnretainedValue()
 }
 
-private let deviceMatchedCallback: IOHIDDeviceCallback = { context, _, _, _ in
-    monitor(from: context)?.refreshDevices()
+private let deviceMatchedCallback: IOHIDDeviceCallback = { context, _, _, device in
+    monitor(from: context)?.deviceAdded(device)
 }
 
-private let deviceRemovedCallback: IOHIDDeviceCallback = { context, _, _, _ in
-    monitor(from: context)?.refreshDevices()
+private let deviceRemovedCallback: IOHIDDeviceCallback = { context, _, _, device in
+    monitor(from: context)?.deviceRemoved(device)
 }
 
 private let inputValueCallback: IOHIDValueCallback = { context, _, _, value in

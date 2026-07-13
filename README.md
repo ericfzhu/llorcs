@@ -12,7 +12,7 @@ chmod +x scripts/build-app.sh
 open "build/llorcs.app"
 ```
 
-On first launch, choose **Open Permission Prompt**, allow llorcs under **System Settings → Privacy & Security → Accessibility**, then return to the menu-bar app.
+On first launch, choose **Open Permission Prompt**, allow llorcs under **System Settings → Privacy & Security → Accessibility**, then return to the menu-bar app. For individual-mouse rules, also allow **Input Monitoring** when prompted; the general mouse and trackpad settings work without it.
 
 ## How device detection works
 
