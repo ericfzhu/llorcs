@@ -29,6 +29,18 @@ public final class MouseDeviceMonitor: ObservableObject {
         ]
         IOHIDManagerSetDeviceMatching(manager, mouseMatch as CFDictionary)
 
+        let wheelInputs: [[String: Any]] = [
+            [
+                kIOHIDElementUsagePageKey: kHIDPage_GenericDesktop,
+                kIOHIDElementUsageKey: kHIDUsage_GD_Wheel
+            ],
+            [
+                kIOHIDElementUsagePageKey: kHIDPage_Consumer,
+                kIOHIDElementUsageKey: kHIDUsage_Csmr_ACPan
+            ]
+        ]
+        IOHIDManagerSetInputValueMatchingMultiple(manager, wheelInputs as CFArray)
+
         let context = Unmanaged.passUnretained(self).toOpaque()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, deviceMatchedCallback, context)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, deviceRemovedCallback, context)
