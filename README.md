@@ -24,6 +24,7 @@ On first launch, choose **Open Permission Prompt**, allow llorcs under **System 
 ## Develop
 
 ```sh
+./scripts/build-icon.sh
 swift test
 swift run llorcs
 ```

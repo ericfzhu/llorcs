@@ -12,6 +12,7 @@ struct LlorcsApp: App {
         MenuBarExtra {
             MenuContent(model: model)
                 .frame(width: 340)
+                .fixedSize(horizontal: false, vertical: true)
         } label: {
             Label("llorcs", systemImage: model.settings.enabled ? "arrow.up.arrow.down.circle.fill" : "arrow.up.arrow.down.circle")
         }
@@ -71,7 +72,7 @@ private struct MenuContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             header
 
             if reverser.state == .accessibilityPermissionNeeded {
@@ -95,7 +96,7 @@ private struct MenuContent: View {
                     .padding(.horizontal, 14)
                     .frame(minHeight: 44)
             }
-            .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .settingsSurface()
 
             if !mouseMonitor.devices.isEmpty {
                 deviceSection
@@ -107,7 +108,7 @@ private struct MenuContent: View {
                     set: { launchAtLogin.setEnabled($0) }
                 ))
                 .padding(.horizontal, 14)
-                .frame(minHeight: 44)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
 
                 if let error = launchAtLogin.errorMessage {
                     Text(error)
@@ -117,7 +118,7 @@ private struct MenuContent: View {
                         .padding(.bottom, 10)
                 }
             }
-            .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .settingsSurface()
 
             HStack {
                 status
@@ -127,8 +128,10 @@ private struct MenuContent: View {
                     .foregroundStyle(.secondary)
                     .frame(minWidth: 44, minHeight: 40)
             }
+            .frame(maxWidth: .infinity)
         }
-        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
         .onAppear {
             reverser.refreshPermissionAndState()
             mouseMonitor.refreshAccessState()
@@ -152,56 +155,60 @@ private struct MenuContent: View {
             Toggle("Enabled", isOn: $settings.enabled)
                 .labelsHidden()
         }
-        .frame(minHeight: 44)
+        .padding(.horizontal, 2)
+        .frame(maxWidth: .infinity, minHeight: 44)
     }
 
     private var accessibilityPermissionCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Label("Accessibility permission needed", systemImage: "hand.raised.fill")
                 .font(.subheadline.weight(.semibold))
             Text("llorcs needs permission to adjust scroll events. After allowing it in System Settings, return here.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineSpacing(1)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Open Permission Prompt") { reverser.requestPermission() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var inputMonitoringCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Label("Input Monitoring for per-mouse rules", systemImage: "computermouse.fill")
                 .font(.subheadline.weight(.semibold))
             Text("The main mouse and trackpad settings still work without this. Allow Input Monitoring to identify individual wheel mice.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineSpacing(1)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Allow Input Monitoring") { mouseMonitor.requestAccess() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .settingsSurface()
     }
 
     private var eventTapFailureCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Label("Scroll handler could not start", systemImage: "exclamationmark.triangle.fill")
                 .font(.subheadline.weight(.semibold))
             Text("Accessibility is allowed, but macOS did not create the scroll event tap. Retry, or toggle Accessibility off and on in System Settings.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineSpacing(1)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Retry") { reverser.start() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
@@ -238,7 +245,7 @@ private struct MenuContent: View {
                     }
                 }
             }
-            .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .settingsSurface()
 
             Text("Per-device rules are best-effort for physical scroll wheels. Gesture mice may be detected as a trackpad.")
                 .font(.caption2)
@@ -304,5 +311,15 @@ private struct MenuContent: View {
             get: { settings.rule(for: deviceID) },
             set: { settings.setRule($0, for: deviceID) }
         )
+    }
+}
+
+private extension View {
+    func settingsSurface() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                Color(nsColor: .controlBackgroundColor).opacity(0.82),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
     }
 }
