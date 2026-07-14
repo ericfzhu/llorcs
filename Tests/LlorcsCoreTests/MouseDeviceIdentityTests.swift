@@ -37,4 +37,24 @@ final class MouseDeviceIdentityTests: XCTestCase {
         )
         XCTAssertNotEqual(usb, bluetooth)
     }
+
+    func testPhysicalIdentityDistinguishesDevicesWithoutSerialNumbers() {
+        let first = MouseDeviceMonitor.makeStableDeviceID(
+            vendor: 1,
+            product: 2,
+            serial: nil,
+            physicalID: "mouse-a",
+            transport: "USB",
+            location: 10
+        )
+        let second = MouseDeviceMonitor.makeStableDeviceID(
+            vendor: 1,
+            product: 2,
+            serial: nil,
+            physicalID: "mouse-b",
+            transport: "USB",
+            location: 10
+        )
+        XCTAssertNotEqual(first, second)
+    }
 }

@@ -6,14 +6,11 @@ enum MouseWheelCorrelation {
         now: UInt64,
         maxAgeNanoseconds: UInt64
     ) -> String? {
-        var candidate: String?
         for report in reports.reversed() {
-            guard now >= report.time, now - report.time <= maxAgeNanoseconds else { break }
-            if let candidate, candidate != report.deviceID {
-                return nil
-            }
-            candidate = report.deviceID
+            guard now >= report.time else { continue }
+            guard now - report.time <= maxAgeNanoseconds else { break }
+            return report.deviceID
         }
-        return candidate
+        return nil
     }
 }

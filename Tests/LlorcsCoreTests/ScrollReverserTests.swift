@@ -13,29 +13,35 @@ final class ScrollReverserTests: XCTestCase {
             wheel3: 0
         ))
 
-        let integerFields: [CGEventField] = [
+        let deltaFields: [CGEventField] = [
             .scrollWheelEventDeltaAxis1,
             .scrollWheelEventDeltaAxis2,
             .scrollWheelEventDeltaAxis3
         ]
-        let doubleFields: [CGEventField] = [
+        let fixedPointFields: [CGEventField] = [
             .scrollWheelEventFixedPtDeltaAxis1,
             .scrollWheelEventFixedPtDeltaAxis2,
-            .scrollWheelEventFixedPtDeltaAxis3,
+            .scrollWheelEventFixedPtDeltaAxis3
+        ]
+        let pointFields: [CGEventField] = [
             .scrollWheelEventPointDeltaAxis1,
             .scrollWheelEventPointDeltaAxis2,
             .scrollWheelEventPointDeltaAxis3
         ]
-        let integersBefore = integerFields.map { event.getIntegerValueField($0) }
-        let doublesBefore = doubleFields.map { event.getDoubleValueField($0) }
+        let deltasBefore = deltaFields.map { event.getIntegerValueField($0) }
+        let fixedPointsBefore = fixedPointFields.map { event.getDoubleValueField($0) }
+        let pointsBefore = pointFields.map { event.getIntegerValueField($0) }
 
         ScrollReverser.reverseDeltas(in: event)
 
-        for (field, value) in zip(integerFields, integersBefore) {
+        for (field, value) in zip(deltaFields, deltasBefore) {
             XCTAssertEqual(event.getIntegerValueField(field), -value)
         }
-        for (field, value) in zip(doubleFields, doublesBefore) {
+        for (field, value) in zip(fixedPointFields, fixedPointsBefore) {
             XCTAssertEqual(event.getDoubleValueField(field), -value, accuracy: 0.0001)
+        }
+        for (field, value) in zip(pointFields, pointsBefore) {
+            XCTAssertEqual(event.getIntegerValueField(field), -value)
         }
     }
 }

@@ -112,7 +112,7 @@ public final class ScrollReverser: ObservableObject {
             let pointer = Unmanaged.passUnretained(self).toOpaque()
             guard let tap = CGEvent.tapCreate(
                 tap: .cgSessionEventTap,
-                place: .headInsertEventTap,
+                place: .tailAppendEventTap,
                 options: .defaultTap,
                 eventsOfInterest: mask,
                 callback: scrollEventCallback,
@@ -282,25 +282,39 @@ public final class ScrollReverser: ObservableObject {
     }
 
     static func reverseDeltas(in event: CGEvent) {
-        let integerFields: [CGEventField] = [
+        let deltaFields: [CGEventField] = [
             .scrollWheelEventDeltaAxis1,
             .scrollWheelEventDeltaAxis2,
             .scrollWheelEventDeltaAxis3
         ]
-        let doubleFields: [CGEventField] = [
+        let fixedPointFields: [CGEventField] = [
             .scrollWheelEventFixedPtDeltaAxis1,
             .scrollWheelEventFixedPtDeltaAxis2,
-            .scrollWheelEventFixedPtDeltaAxis3,
+            .scrollWheelEventFixedPtDeltaAxis3
+        ]
+        let pointFields: [CGEventField] = [
             .scrollWheelEventPointDeltaAxis1,
             .scrollWheelEventPointDeltaAxis2,
             .scrollWheelEventPointDeltaAxis3
         ]
 
-        for field in integerFields {
-            event.setIntegerValueField(field, value: -event.getIntegerValueField(field))
+        // Snapshot all representations before modifying any field. Setting a
+        // DeltaAxis field makes macOS recalculate the fixed-point and point
+        // deltas, so reading those values afterward would reverse them twice.
+        let deltaValues = deltaFields.map { event.getIntegerValueField($0) }
+        let fixedPointValues = fixedPointFields.map { event.getDoubleValueField($0) }
+        let pointValues = pointFields.map { event.getIntegerValueField($0) }
+
+        for (field, value) in zip(deltaFields, deltaValues) {
+            event.setIntegerValueField(field, value: -value)
         }
-        for field in doubleFields {
-            event.setDoubleValueField(field, value: -event.getDoubleValueField(field))
+        for (field, value) in zip(fixedPointFields, fixedPointValues) {
+            event.setDoubleValueField(field, value: -value)
+        }
+        // Point deltas must be written last; applications commonly consume
+        // these pixel values, and DeltaAxis writes update them implicitly.
+        for (field, value) in zip(pointFields, pointValues) {
+            event.setIntegerValueField(field, value: -value)
         }
     }
 }

@@ -76,12 +76,12 @@ public final class MouseDeviceMonitor: ObservableObject {
         if shouldClose { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
     }
 
-    public func recentWheelDeviceID(maxAgeNanoseconds: UInt64 = 80_000_000) -> String? {
+    public func recentWheelDeviceID(maxAgeNanoseconds: UInt64 = 150_000_000) -> String? {
         let now = DispatchTime.now().uptimeNanoseconds
         lock.lock()
         defer { lock.unlock() }
-        // Ambiguous reports from two devices deliberately fall back to the
-        // global mouse rule rather than applying the wrong per-device rule.
+        // The newest HID report identifies the active mouse. Older reports
+        // from another mouse must not force a fallback to the global rule.
         return MouseWheelCorrelation.deviceID(
             in: recentWheelReports,
             now: now,
@@ -248,11 +248,13 @@ public final class MouseDeviceMonitor: ObservableObject {
         let product = property(kIOHIDProductIDKey, from: device) as? Int ?? 0
         let location = property(kIOHIDLocationIDKey, from: device) as? Int ?? 0
         let serial = property(kIOHIDSerialNumberKey, from: device) as? String
+        let physicalID = property(kIOHIDPhysicalDeviceUniqueIDKey, from: device) as? String
         let transport = property(kIOHIDTransportKey, from: device) as? String ?? "unknown"
         return makeStableDeviceID(
             vendor: vendor,
             product: product,
             serial: serial,
+            physicalID: physicalID,
             transport: transport,
             location: location
         )
@@ -262,12 +264,17 @@ public final class MouseDeviceMonitor: ObservableObject {
         vendor: Int,
         product: Int,
         serial: String?,
+        physicalID: String? = nil,
         transport: String,
         location: Int
     ) -> String {
         let cleanedSerial = serial?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !cleanedSerial.isEmpty {
             return "\(vendor):\(product):serial:\(cleanedSerial)"
+        }
+        let cleanedPhysicalID = physicalID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !cleanedPhysicalID.isEmpty {
+            return "\(vendor):\(product):physical:\(cleanedPhysicalID)"
         }
         return "\(vendor):\(product):\(transport):location:\(location)"
     }

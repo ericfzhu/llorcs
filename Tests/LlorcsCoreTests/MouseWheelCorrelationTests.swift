@@ -13,12 +13,15 @@ final class MouseWheelCorrelationTests: XCTestCase {
         )
     }
 
-    func testRejectsAmbiguousRecentDevices() {
+    func testNewestRecentDeviceWinsWhenSwitchingMice() {
         let reports = [
             (deviceID: "mouse-a", time: UInt64(960)),
             (deviceID: "mouse-b", time: UInt64(980))
         ]
-        XCTAssertNil(MouseWheelCorrelation.deviceID(in: reports, now: 1_000, maxAgeNanoseconds: 100))
+        XCTAssertEqual(
+            MouseWheelCorrelation.deviceID(in: reports, now: 1_000, maxAgeNanoseconds: 100),
+            "mouse-b"
+        )
     }
 
     func testIgnoresExpiredReportFromAnotherDevice() {
