@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import IOKit.hid
 
@@ -97,9 +98,12 @@ public final class MouseDeviceMonitor: ObservableObject {
         }
     }
 
-    public func requestAccess() {
-        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+    @discardableResult
+    public func requestAccess() -> Bool {
+        let coreGraphicsGranted = CGRequestListenEventAccess()
+        let hidGranted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
         refreshAccessState()
+        return coreGraphicsGranted || hidGranted || Self.hasListenAccess()
     }
 
     public func setMonitoringEnabled(_ enabled: Bool) {
@@ -111,10 +115,10 @@ public final class MouseDeviceMonitor: ObservableObject {
 
     public func refreshAccessState() {
         let state: HIDAccessState
-        switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
-        case kIOHIDAccessTypeGranted:
+        switch (Self.hasListenAccess(), IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)) {
+        case (true, _):
             state = .granted
-        case kIOHIDAccessTypeDenied:
+        case (false, kIOHIDAccessTypeDenied):
             state = .denied
         default:
             state = .unknown
@@ -126,6 +130,11 @@ public final class MouseDeviceMonitor: ObservableObject {
             DispatchQueue.main.async { [weak self] in self?.accessState = state }
         }
         updateManager(for: state)
+    }
+
+    private static func hasListenAccess() -> Bool {
+        CGPreflightListenEventAccess()
+            || IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
     }
 
     private func updateManager(for state: HIDAccessState) {

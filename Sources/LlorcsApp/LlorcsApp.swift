@@ -131,7 +131,8 @@ private struct MenuContent: View {
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .onAppear {
             reverser.refreshPermissionAndState()
             mouseMonitor.refreshAccessState()
@@ -186,7 +187,7 @@ private struct MenuContent: View {
                 .foregroundStyle(.secondary)
                 .lineSpacing(1)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Allow Input Monitoring") { mouseMonitor.requestAccess() }
+            Button("Allow Input Monitoring") { requestInputMonitoring() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }
@@ -211,6 +212,18 @@ private struct MenuContent: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func requestInputMonitoring() {
+        guard !mouseMonitor.requestAccess() else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            mouseMonitor.refreshAccessState()
+            guard mouseMonitor.accessState != .granted,
+                  let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+            else { return }
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private var deviceSection: some View {
