@@ -28,6 +28,7 @@ public final class MouseDeviceMonitor: ObservableObject {
     @Published public private(set) var devices: [MouseDevice] = []
     @Published public private(set) var accessState: HIDAccessState = .unknown
     @Published public private(set) var hasObservedWheelInput = false
+    @Published public private(set) var lastDetectedDeviceName: String?
 
     private let manager: IOHIDManager
     private let queue = DispatchQueue(label: "app.llorcs.hid")
@@ -36,6 +37,7 @@ public final class MouseDeviceMonitor: ObservableObject {
     private var managerIsOpen = false
     private var deviceCache: [UInt: MouseDevice] = [:]
     private var observedWheelInput = false
+    private var lastDetectedDeviceID: String?
     private var recentWheelReports: [(deviceID: String, time: UInt64)] = []
 
     public init(enabled: Bool = true) {
@@ -65,6 +67,9 @@ public final class MouseDeviceMonitor: ObservableObject {
         IOHIDManagerRegisterDeviceRemovalCallback(manager, deviceRemovedCallback, context)
         IOHIDManagerRegisterInputValueCallback(manager, inputValueCallback, context)
         IOHIDManagerSetDispatchQueue(manager, queue)
+        // Dispatch-queue based HID managers are created inactive. Without this,
+        // device and input callbacks are not guaranteed to be delivered.
+        IOHIDManagerActivate(manager)
         refreshAccessState()
     }
 
@@ -74,6 +79,7 @@ public final class MouseDeviceMonitor: ObservableObject {
         managerIsOpen = false
         lock.unlock()
         if shouldClose { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
+        IOHIDManagerCancel(manager)
     }
 
     public func recentWheelDeviceID(maxAgeNanoseconds: UInt64 = 150_000_000) -> String? {
@@ -159,10 +165,12 @@ public final class MouseDeviceMonitor: ObservableObject {
                 self.deviceCache.removeAll()
                 self.recentWheelReports.removeAll()
                 self.observedWheelInput = false
+                self.lastDetectedDeviceID = nil
                 self.lock.unlock()
                 DispatchQueue.main.async { [weak self] in
                     self?.devices = []
                     self?.hasObservedWheelInput = false
+                    self?.lastDetectedDeviceName = nil
                 }
             }
         }
@@ -185,11 +193,16 @@ public final class MouseDeviceMonitor: ObservableObject {
             recentWheelReports.removeFirst(recentWheelReports.count - 16)
         }
         let isFirstWheelInput = !observedWheelInput
+        let didChangeDevice = lastDetectedDeviceID != mouse.id
         observedWheelInput = true
+        lastDetectedDeviceID = mouse.id
         lock.unlock()
 
-        if isFirstWheelInput {
-            DispatchQueue.main.async { [weak self] in self?.hasObservedWheelInput = true }
+        if isFirstWheelInput || didChangeDevice {
+            DispatchQueue.main.async { [weak self] in
+                self?.lastDetectedDeviceName = mouse.name
+                if isFirstWheelInput { self?.hasObservedWheelInput = true }
+            }
         }
     }
 
@@ -219,8 +232,8 @@ public final class MouseDeviceMonitor: ObservableObject {
         deviceCache = Dictionary(uniqueKeysWithValues: pairs)
         lock.unlock()
 
-        let connected = pairs
-            .map(\.1)
+        let connected = Dictionary(pairs.map { ($0.1.id, $0.1) }, uniquingKeysWith: { first, _ in first })
+            .values
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
         DispatchQueue.main.async { [weak self] in

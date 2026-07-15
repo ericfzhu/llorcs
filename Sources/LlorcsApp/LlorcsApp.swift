@@ -307,7 +307,12 @@ private struct MenuContent: View {
         switch mouseMonitor.attributionState {
         case .permissionNeeded: "Per-device detection needs Input Monitoring"
         case .awaitingWheelInput: "Per-device detection ready; scroll a mouse to verify"
-        case .ready: "Per-device wheel detection active"
+        case .ready:
+            if let name = mouseMonitor.lastDetectedDeviceName {
+                "Last detected: \(name)"
+            } else {
+                "Per-device wheel detection active"
+            }
         }
     }
 
