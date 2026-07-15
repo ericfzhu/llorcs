@@ -34,7 +34,9 @@ public final class MouseDeviceMonitor: ObservableObject {
     private let queue = DispatchQueue(label: "app.llorcs.hid")
     private let lock = NSLock()
     private var monitoringEnabled: Bool
+    private var acceptsInput = false
     private var managerIsOpen = false
+    private var managerIsActivated = false
     private var deviceCache: [UInt: MouseDevice] = [:]
     private var observedWheelInput = false
     private var lastDetectedDeviceID: String?
@@ -67,19 +69,18 @@ public final class MouseDeviceMonitor: ObservableObject {
         IOHIDManagerRegisterDeviceRemovalCallback(manager, deviceRemovedCallback, context)
         IOHIDManagerRegisterInputValueCallback(manager, inputValueCallback, context)
         IOHIDManagerSetDispatchQueue(manager, queue)
-        // Dispatch-queue based HID managers are created inactive. Without this,
-        // device and input callbacks are not guaranteed to be delivered.
-        IOHIDManagerActivate(manager)
         refreshAccessState()
     }
 
     deinit {
         lock.lock()
         let shouldClose = managerIsOpen
+        let shouldCancel = managerIsActivated
         managerIsOpen = false
+        managerIsActivated = false
         lock.unlock()
         if shouldClose { IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
-        IOHIDManagerCancel(manager)
+        if shouldCancel { IOHIDManagerCancel(manager) }
     }
 
     public func recentWheelDeviceID(maxAgeNanoseconds: UInt64 = 150_000_000) -> String? {
@@ -149,19 +150,31 @@ public final class MouseDeviceMonitor: ObservableObject {
 
             self.lock.lock()
             let isOpen = self.managerIsOpen
+            let isActivated = self.managerIsActivated
             let shouldMonitor = self.monitoringEnabled
+            self.acceptsInput = state == .granted && shouldMonitor && isOpen
             self.lock.unlock()
 
             if state == .granted && shouldMonitor && !isOpen {
+                // Opening propagates callback registration to every device, so
+                // it must happen before dispatch-queue activation.
                 let result = IOHIDManagerOpen(self.manager, IOOptionBits(kIOHIDOptionsTypeNone))
                 self.lock.lock()
                 self.managerIsOpen = result == kIOReturnSuccess
+                self.acceptsInput = result == kIOReturnSuccess
+                if result == kIOReturnSuccess && !isActivated {
+                    self.managerIsActivated = true
+                }
                 self.lock.unlock()
-                if result == kIOReturnSuccess { self.refreshDevices() }
-            } else if (state != .granted || !shouldMonitor) && isOpen {
-                IOHIDManagerClose(self.manager, IOOptionBits(kIOHIDOptionsTypeNone))
+                if result == kIOReturnSuccess {
+                    if !isActivated { IOHIDManagerActivate(self.manager) }
+                    self.refreshDevices()
+                }
+            } else if state == .granted && shouldMonitor && isOpen {
+                self.refreshDevices()
+            } else if state != .granted || !shouldMonitor {
                 self.lock.lock()
-                self.managerIsOpen = false
+                self.acceptsInput = false
                 self.deviceCache.removeAll()
                 self.recentWheelReports.removeAll()
                 self.observedWheelInput = false
@@ -179,6 +192,10 @@ public final class MouseDeviceMonitor: ObservableObject {
     fileprivate func recordWheel(from device: IOHIDDevice) {
         let key = Self.deviceKey(device)
         lock.lock()
+        guard acceptsInput else {
+            lock.unlock()
+            return
+        }
         let cachedDevice = deviceCache[key]
         lock.unlock()
 
