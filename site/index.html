@@ -140,19 +140,64 @@
                     </svg>
                     <span>MX Master 3S</span>
                   </div>
-                  <div class="rule-select-wrap">
-                    <select
-                      class="rule-select"
-                      aria-label="Scroll direction for MX Master 3S"
-                    >
-                      <option value="default">Use default</option>
-                      <option value="reverse">Reverse</option>
-                      <option value="standard">Standard</option>
-                    </select>
-                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                <div class="rule-menu">
+                  <button
+                    class="rule-trigger"
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                    aria-controls="mouse-rule-options"
+                  >
+                    <span class="rule-value">Use default</span>
+                    <svg class="rule-chevron" viewBox="0 0 16 16" aria-hidden="true">
                       <path d="m5 6 3 3 3-3" />
                     </svg>
+                  </button>
+                  <div
+                    class="rule-popover"
+                    id="mouse-rule-options"
+                    role="menu"
+                    aria-label="Scroll direction for MX Master 3S"
+                    aria-hidden="true"
+                  >
+                    <button
+                      class="rule-option is-selected"
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked="true"
+                      data-label="Use default"
+                    >
+                      <span>Use default</span>
+                      <svg class="option-check" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="m4 8.2 2.6 2.6L12 5.4" />
+                      </svg>
+                    </button>
+                    <button
+                      class="rule-option"
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked="false"
+                      data-label="Reverse"
+                    >
+                      <span>Reverse</span>
+                      <svg class="option-check" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="m4 8.2 2.6 2.6L12 5.4" />
+                      </svg>
+                    </button>
+                    <button
+                      class="rule-option"
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked="false"
+                      data-label="Standard"
+                    >
+                      <span>Standard</span>
+                      <svg class="option-check" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="m4 8.2 2.6 2.6L12 5.4" />
+                      </svg>
+                    </button>
                   </div>
+                </div>
                 </div>
               </div>
 

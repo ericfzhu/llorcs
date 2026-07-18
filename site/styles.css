@@ -327,6 +327,11 @@ h1 {
     0 1px 2px rgba(0, 0, 0, 0.035);
 }
 
+.device-label + .settings-group {
+  z-index: 2;
+  overflow: visible;
+}
+
 .setting-row {
   display: flex;
   min-height: 52px;
@@ -436,47 +441,144 @@ h1 {
   white-space: nowrap;
 }
 
-.rule-select-wrap {
+.rule-menu {
   position: relative;
+  flex: 0 0 auto;
+}
+
+.rule-trigger {
   display: flex;
   min-height: 40px;
-  flex: 0 0 auto;
   align-items: center;
-  border-radius: 8px;
-  background: transparent;
-  transition-property: background-color;
-  transition-duration: 150ms;
-  transition-timing-function: ease-out;
-}
-
-.rule-select-wrap:hover {
-  background: rgba(0, 0, 0, 0.045);
-}
-
-.rule-select {
-  min-height: 40px;
-  padding: 0 26px 0 8px;
+  gap: 3px;
+  padding: 0 7px 0 9px;
   border: 0;
-  outline: 0;
-  appearance: none;
-  -webkit-appearance: none;
+  border-radius: 8px;
   background: transparent;
   color: #515154;
   cursor: pointer;
   font: inherit;
   font-size: 11px;
+  transition-property: background-color, transform;
+  transition-duration: 150ms, 100ms;
+  transition-timing-function: ease-out;
 }
 
-.rule-select-wrap svg {
-  position: absolute;
-  right: 7px;
+.rule-trigger:hover {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.rule-trigger:active {
+  transform: scale(0.96);
+}
+
+.rule-chevron {
   width: 12px;
-  pointer-events: none;
+  flex: 0 0 auto;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.5;
+  transition-property: transform;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rule-menu.is-open .rule-chevron {
+  transform: rotate(180deg);
+}
+
+.rule-popover {
+  position: absolute;
+  z-index: 10;
+  right: 0;
+  bottom: calc(100% + 3px);
+  width: 138px;
+  padding: 5px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.07),
+    0 8px 22px rgba(0, 0, 0, 0.12),
+    0 22px 50px rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  visibility: hidden;
+  filter: blur(4px);
+  pointer-events: none;
+  transform: translateY(5px) scale(0.98);
+  transform-origin: bottom right;
+  transition-property: opacity, transform, filter, visibility;
+  transition-duration: 140ms, 160ms, 140ms, 0s;
+  transition-delay: 0s, 0s, 0s, 160ms;
+  transition-timing-function: ease-out, cubic-bezier(0.22, 1, 0.36, 1), ease-out, linear;
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+}
+
+.rule-menu.is-open .rule-popover {
+  opacity: 1;
+  visibility: visible;
+  filter: blur(0);
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
+}
+
+.rule-option {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 9px 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #3a3a3c;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  transition-property: color, background-color, transform;
+  transition-duration: 130ms, 130ms, 100ms;
+  transition-timing-function: ease-out;
+}
+
+.rule-option:hover {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.rule-option:active {
+  transform: scale(0.96);
+}
+
+.rule-option.is-selected {
+  background: rgba(0, 113, 227, 0.09);
+  color: var(--blue);
+  font-weight: 600;
+}
+
+.option-check {
+  width: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+  opacity: 0;
+  filter: blur(4px);
+  transform: scale(0.25);
+  transition-property: opacity, transform, filter;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rule-option.is-selected .option-check {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
 }
 
 .menu-footer {
@@ -672,7 +774,8 @@ footer {
 }
 
 .switch:focus-visible,
-.rule-select:focus-visible,
+.rule-trigger:focus-visible,
+.rule-option:focus-visible,
 .button:focus-visible,
 .text-link:focus-visible,
 .nav-link:focus-visible,
