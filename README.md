@@ -30,3 +30,19 @@ swift run llorcs
 ```
 
 Running via `swift run` associates Accessibility permission with your terminal. Build and run the `.app` for normal use.
+
+## Website
+
+The static demo site lives in `site/` and is ready for Cloudflare Pages.
+
+```sh
+yarn dev
+```
+
+Then open `http://localhost:5173`.
+
+To deploy:
+
+```sh
+npx wrangler pages deploy site --project-name=llorcs
+```
