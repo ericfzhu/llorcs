@@ -31,6 +31,16 @@ swift run llorcs
 
 Running via `swift run` associates Accessibility permission with your terminal. Build and run the `.app` for normal use.
 
+## Build a DMG
+
+Create a universal drag-to-Applications disk image:
+
+```sh
+./scripts/build-dmg.sh
+```
+
+The finished image is written to `build/llorcs-<version>.dmg`. Without a trusted Developer ID certificate, the app uses a local certificate when available or falls back to an ad hoc signature. macOS may require **Open Anyway** under **System Settings → Privacy & Security** on first launch.
+
 ## Website
 
 The static demo site lives in `site/` and is ready for Cloudflare Pages.
