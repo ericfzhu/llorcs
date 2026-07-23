@@ -39,7 +39,7 @@ Create a universal drag-to-Applications disk image:
 ./scripts/build-dmg.sh
 ```
 
-The finished image is written to `build/llorcs-<version>.dmg`. Without a trusted Developer ID certificate, the app uses a local certificate when available or falls back to an ad hoc signature. macOS may require **Open Anyway** under **System Settings → Privacy & Security** on first launch.
+The finished image is written to `build/llorcs-<version>.dmg`. Without a trusted Developer ID certificate, the app uses an ad hoc signature by default. Set `LLORCS_SIGNING_IDENTITY` to use another signing identity. macOS may require **Open Anyway** under **System Settings → Privacy & Security** on first launch.
 
 ## Website
 
